@@ -52,37 +52,45 @@ let currentAudio: HTMLAudioElement | null = null;
 const cleanTextForTTS = (text: string): string => {
   let cleaned = text;
   
-  // Remove markdown bold/italic
+  // Remove markdown bold/italic (but preserve the text)
   cleaned = cleaned.replace(/\*\*\*(.+?)\*\*\*/g, '$1'); // ***text***
   cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, '$1');     // **text**
   cleaned = cleaned.replace(/\*(.+?)\*/g, '$1');         // *text*
   cleaned = cleaned.replace(/__(.+?)__/g, '$1');         // __text__
   cleaned = cleaned.replace(/_(.+?)_/g, '$1');           // _text_
   
-  // Remove markdown headers
+  // Remove markdown headers (keep the text)
   cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
   
-  // Remove markdown lists (keep the content)
+  // Remove markdown bullet points but keep numbers and content
   cleaned = cleaned.replace(/^\s*[-*+]\s+/gm, '');
-  cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, '');
+  cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, ''); // Remove list numbers like "1. "
   
   // Remove code blocks
   cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
   cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
   
-  // Remove links but keep text
+  // Remove markdown links but keep link text
   cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
   
-  // Remove emojis (they sound weird when read)
-  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
-  cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, '');
-  cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, '');
+  // Remove emojis (they don't sound good in TTS)
+  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}]/gu, ' ');
+  cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, ' ');
+  cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, ' ');
   
-  // Remove extra whitespace
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  // Convert markdown line breaks to spaces
+  cleaned = cleaned.replace(/\n{3,}/g, '. ');  // Multiple line breaks to period + space
+  cleaned = cleaned.replace(/\n\n/g, '. ');     // Double line breaks to period
+  cleaned = cleaned.replace(/\n/g, ' ');        // Single line breaks to space
+  
+  // Clean up multiple spaces but preserve single spaces
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
   
-  // Clean up spacing around punctuation
+  // Clean up spacing around punctuation (but keep the punctuation!)
+  cleaned = cleaned.replace(/\s+([,.!?;:])/g, '$1'); // Remove space before punctuation
+  cleaned = cleaned.replace(/([,.!?;:])\s*/g, '$1 '); // Add single space after punctuation
+  
+  // Final trim
   cleaned = cleaned.trim();
   
   return cleaned;
@@ -213,8 +221,7 @@ export const useChatStore = create<ChatStore>()(
 
           // Clean the text before sending to TTS
           const cleanedText = cleanTextForTTS(text);
-          console.log('🧹 Original text length:', text.length);
-          console.log('🧹 Cleaned text length:', cleanedText.length);
+          console.log('🧹 Cleaned text preview:', cleanedText.substring(0, 200));
 
           // Try ElevenLabs first
           let usingElevenLabs = false;
