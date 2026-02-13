@@ -118,47 +118,77 @@ const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
         window.speechSynthesis.cancel();
       }
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Set language
-      utterance.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
-      
-      // Set voice properties for better quality
-      utterance.rate = 0.9;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
+      // Wait a bit for cancel to complete
+      setTimeout(() => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Set language code
+        const langCode = language === 'hi' ? 'hi-IN' : 'en-IN';
+        utterance.lang = langCode;
+        
+        // Set voice properties
+        utterance.rate = 0.85; // Slightly slower for Hindi clarity
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
 
-      // Try to find the best voice
-      const voices = window.speechSynthesis.getVoices();
-      const targetLang = language === 'hi' ? 'hi' : 'en';
-      
-      // Prefer local voices first
-      let preferredVoice = voices.find(voice => 
-        voice.lang.startsWith(targetLang) && voice.localService
-      );
-      
-      // Fallback to any voice with the language
-      if (!preferredVoice) {
-        preferredVoice = voices.find(voice => 
-          voice.lang.startsWith(targetLang)
+        // Get available voices
+        const voices = window.speechSynthesis.getVoices();
+        console.log('📢 Total voices available:', voices.length);
+        
+        // Filter Hindi voices
+        const hindiVoices = voices.filter(voice => 
+          voice.lang.toLowerCase().includes('hi')
         );
-      }
-      
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
+        console.log('🇮🇳 Hindi voices found:', hindiVoices.length);
+        
+        if (hindiVoices.length > 0) {
+          hindiVoices.forEach((voice, index) => {
+            console.log(`  ${index + 1}. ${voice.name} (${voice.lang})`);
+          });
+        }
+        
+        // Select best voice
+        let selectedVoice = null;
+        
+        if (language === 'hi' && hindiVoices.length > 0) {
+          // Prefer Google Hindi voice
+          selectedVoice = hindiVoices.find(v => v.name.includes('Google')) ||
+                         hindiVoices.find(v => v.name.includes('हिन्दी')) ||
+                         hindiVoices[0];
+        } else if (language === 'en') {
+          const englishVoices = voices.filter(v => 
+            v.lang.toLowerCase().includes('en')
+          );
+          selectedVoice = englishVoices.find(v => v.name.includes('Google')) ||
+                         englishVoices[0];
+        }
+        
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
+          console.log('✅ Selected voice:', selectedVoice.name, selectedVoice.lang);
+        } else {
+          console.warn('⚠️ No suitable voice found, using default');
+        }
 
-      utterance.onend = () => {
-        resolve();
-      };
+        utterance.onstart = () => {
+          console.log('🔊 Speech started');
+        };
 
-      utterance.onerror = (event) => {
-        console.error('Speech synthesis error:', event);
-        reject(event);
-      };
+        utterance.onend = () => {
+          console.log('✅ Speech ended');
+          resolve();
+        };
 
-      window.speechSynthesis.speak(utterance);
+        utterance.onerror = (event) => {
+          console.error('❌ Speech error:', event.error);
+          reject(new Error(`Speech error: ${event.error}`));
+        };
+
+        // Speak
+        window.speechSynthesis.speak(utterance);
+      }, 100);
     } catch (error) {
+      console.error('❌ TTS setup error:', error);
       reject(error);
     }
   });
@@ -234,7 +264,7 @@ export const useChatStore = create<ChatStore>()(
 
           // Clean the text before sending to TTS
           const cleanedText = cleanTextForTTS(text);
-          console.log('🧹 Cleaned text for TTS:', cleanedText.substring(0, 300) + '...');
+          console.log('🧹 Cleaned text for TTS:', cleanedText.substring(0, 200) + '...');
 
           // Try ElevenLabs first
           let usingElevenLabs = false;

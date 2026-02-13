@@ -120,34 +120,46 @@ export const SathiPage = () => {
       toast('Listening... Speak now!', { icon: '🎤' });
     }
   };
-  // Inside SathiPage component, add this after all the const declarations:
-useEffect(() => {
-  // Load voices for speech synthesis
+  useEffect(() => {
+  // Force load voices for speech synthesis
   const loadVoices = () => {
     const voices = window.speechSynthesis.getVoices();
-    console.log('🔊 Available voices:', voices.length);
+    console.log('🔊 Loading voices...');
+    console.log('📢 Total voices:', voices.length);
     
-    // Log Hindi voices
-    const hindiVoices = voices.filter(v => v.lang.startsWith('hi'));
-    if (hindiVoices.length > 0) {
-      console.log('✅ Hindi voices:', hindiVoices.map(v => v.name));
-    }
-    
-    // Log English voices
-    const englishVoices = voices.filter(v => v.lang.startsWith('en'));
-    if (englishVoices.length > 0) {
-      console.log('✅ English voices:', englishVoices.map(v => v.name));
+    if (voices.length > 0) {
+      const hindiVoices = voices.filter(v => v.lang.toLowerCase().includes('hi'));
+      const englishVoices = voices.filter(v => v.lang.toLowerCase().includes('en'));
+      
+      console.log('🇮🇳 Hindi voices:', hindiVoices.length);
+      if (hindiVoices.length > 0) {
+        console.log('Available Hindi voices:');
+        hindiVoices.forEach((v, i) => {
+          console.log(`  ${i + 1}. ${v.name} (${v.lang})`);
+        });
+      } else {
+        console.warn('⚠️ No Hindi voices found! Hindi TTS may not work.');
+      }
+      
+      console.log('🇬🇧 English voices:', englishVoices.length);
+    } else {
+      console.warn('⚠️ No voices loaded yet, waiting...');
     }
   };
   
   // Load immediately
   loadVoices();
   
-  // Some browsers need this event
+  // Chrome/Safari need this event
   if (window.speechSynthesis.onvoiceschanged !== undefined) {
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }
+  
+  // Force reload after a delay (some browsers need this)
+  setTimeout(loadVoices, 500);
+  setTimeout(loadVoices, 1500);
 }, []);
+
 
 
   useEffect(() => {
