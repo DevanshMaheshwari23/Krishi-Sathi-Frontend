@@ -23,12 +23,11 @@ import ReactMarkdown from 'react-markdown';
 import { Button } from '../../components/ui/Button';
 import { cn } from '../../lib/cn';
 
-
 export const SathiPage = () => {
   const [input, setInput] = useState('');
+  const [interimText, setInterimText] = useState(''); // ✅ NEW: Real-time voice text
   const [showQuickActions, setShowQuickActions] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
   
   const { 
     messages, 
@@ -43,15 +42,24 @@ export const SathiPage = () => {
     analyzePest
   } = useChatStore();
 
-  // Speech Recognition
+  // Speech Recognition with real-time display
   const { isListening, isSupported, startListening, stopListening } = useSpeechRecognition({
     language,
+    onInterim: (transcript) => {
+      // ✅ Show interim results in real-time
+      console.log('🔄 Interim:', transcript);
+      setInterimText(transcript);
+    },
     onResult: (transcript) => {
+      // ✅ Final result - set as input
+      console.log('✅ Final:', transcript);
       setInput(transcript);
-      toast.success(`Heard: ${transcript.slice(0, 50)}...`);
+      setInterimText('');
+      toast.success(`Captured: ${transcript.slice(0, 50)}${transcript.length > 50 ? '...' : ''}`);
     },
     onError: (error) => {
       toast.error(error);
+      setInterimText('');
     }
   });
 
@@ -111,56 +119,58 @@ export const SathiPage = () => {
   const toggleVoiceInput = () => {
     if (isListening) {
       stopListening();
+      setInterimText(''); // Clear interim text
     } else {
       if (!isSupported) {
         toast.error('Voice input not supported in this browser');
         return;
       }
+      setInput(''); // Clear input
+      setInterimText(''); // Clear interim
       startListening();
-      toast('Listening... Speak now!', { icon: '🎤' });
+      toast('🎤 Listening... Speak now!', { icon: '🎤', duration: 4000 });
     }
   };
+
   useEffect(() => {
-  // Force load voices for speech synthesis
-  const loadVoices = () => {
-    const voices = window.speechSynthesis.getVoices();
-    console.log('🔊 Loading voices...');
-    console.log('📢 Total voices:', voices.length);
-    
-    if (voices.length > 0) {
-      const hindiVoices = voices.filter(v => v.lang.toLowerCase().includes('hi'));
-      const englishVoices = voices.filter(v => v.lang.toLowerCase().includes('en'));
+    // Force load voices for speech synthesis
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      console.log('🔊 Loading voices...');
+      console.log('📢 Total voices:', voices.length);
       
-      console.log('🇮🇳 Hindi voices:', hindiVoices.length);
-      if (hindiVoices.length > 0) {
-        console.log('Available Hindi voices:');
-        hindiVoices.forEach((v, i) => {
-          console.log(`  ${i + 1}. ${v.name} (${v.lang})`);
-        });
+      if (voices.length > 0) {
+        const hindiVoices = voices.filter(v => v.lang.toLowerCase().includes('hi'));
+        const englishVoices = voices.filter(v => v.lang.toLowerCase().includes('en'));
+        
+        console.log('🇮🇳 Hindi voices:', hindiVoices.length);
+        if (hindiVoices.length > 0) {
+          console.log('Available Hindi voices:');
+          hindiVoices.forEach((v, i) => {
+            console.log(`  ${i + 1}. ${v.name} (${v.lang})`);
+          });
+        } else {
+          console.warn('⚠️ No Hindi voices found! Hindi TTS may not work.');
+        }
+        
+        console.log('🇬🇧 English voices:', englishVoices.length);
       } else {
-        console.warn('⚠️ No Hindi voices found! Hindi TTS may not work.');
+        console.warn('⚠️ No voices loaded yet, waiting...');
       }
-      
-      console.log('🇬🇧 English voices:', englishVoices.length);
-    } else {
-      console.warn('⚠️ No voices loaded yet, waiting...');
+    };
+    
+    // Load immediately
+    loadVoices();
+    
+    // Chrome/Safari need this event
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
     }
-  };
-  
-  // Load immediately
-  loadVoices();
-  
-  // Chrome/Safari need this event
-  if (window.speechSynthesis.onvoiceschanged !== undefined) {
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-  }
-  
-  // Force reload after a delay (some browsers need this)
-  setTimeout(loadVoices, 500);
-  setTimeout(loadVoices, 1500);
-}, []);
-
-
+    
+    // Force reload after a delay (some browsers need this)
+    setTimeout(loadVoices, 500);
+    setTimeout(loadVoices, 1500);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -372,9 +382,9 @@ export const SathiPage = () => {
                 animate={{ opacity: 1 }}
                 className="flex justify-center"
               >
-                <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2">
+                <div className="flex items-center gap-2 rounded-full border border-red-500 bg-red-50 dark:bg-red-950/20 px-4 py-2">
                   <Mic className="h-5 w-5 text-red-500 animate-pulse" />
-                  <span className="text-sm text-[var(--text)]">
+                  <span className="text-sm font-medium text-red-600 dark:text-red-400">
                     {language === 'hi' ? 'सुन रहा हूँ...' : 'Listening...'}
                   </span>
                 </div>
@@ -420,7 +430,10 @@ export const SathiPage = () => {
               disabled={isLoading}
               variant={isListening ? "danger" : "secondary"}
               size="sm"
-              className="h-12 w-12 rounded-[var(--radius-md)]"
+              className={cn(
+                "h-12 w-12 rounded-[var(--radius-md)]",
+                isListening && "animate-pulse"
+              )}
               title={isListening ? 'Stop listening' : 'Start voice input'}
             >
               {isListening ? (
@@ -432,15 +445,32 @@ export const SathiPage = () => {
 
             <div className="relative flex-1">
               <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
+                value={isListening ? interimText : input} 
+                onChange={(e) => !isListening && setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder={language === 'hi' ? 'खेती के बारे में कुछ पूछें या माइक दबाएं...' : 'Ask about farming or press mic...'}
-                className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] px-4 py-3 text-[var(--text)] placeholder-[var(--text-muted)] outline-none transition-all focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[var(--border)]"
+                placeholder={language === 'hi' ? '🎤 बोलें या लिखें...' : '🎤 Speak or type...'}
+                className={cn(
+                  "w-full resize-none rounded-[var(--radius-md)] border bg-[var(--background)] px-4 py-3 text-[var(--text)] placeholder-[var(--text-muted)] outline-none transition-all scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[var(--border)]",
+                  isListening 
+                    ? "border-red-500 ring-2 ring-red-500/20" 
+                    : "border-[var(--border)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20"
+                )}
                 rows={1}
                 style={{ maxHeight: '120px', minHeight: '48px' }}
-                disabled={isLoading || isListening}
+                disabled={isLoading}
+                readOnly={isListening}
               />
+              
+              {/* Listening indicator */}
+              {isListening && (
+                <div className="absolute right-3 top-3 flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-red-500" style={{ animationDelay: '0ms' }} />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-red-500" style={{ animationDelay: '150ms' }} />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-red-500" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
             </div>
 
             <Button
@@ -460,9 +490,12 @@ export const SathiPage = () => {
 
           <div className="mt-3 flex items-center justify-between px-2">
             <p className="text-xs text-[var(--text-muted)]">
-              {language === 'hi' 
-                ? '🎤 बोलें या ⌨️ लिखें • Enter से भेजें'
-                : '🎤 Speak or ⌨️ Type • Press Enter to send'}
+              {isListening 
+                ? (language === 'hi' ? '🎤 बोल रहे हैं... रुकने के लिए माइक दबाएं' : '🎤 Speaking... Press mic to stop')
+                : (language === 'hi' 
+                  ? '🎤 बोलें या ⌨️ लिखें • Enter से भेजें'
+                  : '🎤 Speak or ⌨️ Type • Press Enter to send')
+              }
             </p>
             <div className="flex items-center gap-2">
               <span className="text-xs text-[var(--text-muted)]">Powered by</span>

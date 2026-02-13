@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 interface SpeechRecognitionOptions {
   language: 'en' | 'hi';
   onResult: (transcript: string) => void;
+  onInterim?: (transcript: string) => void; // ✅ NEW: Real-time interim results
   onError: (error: string) => void;
 }
 
@@ -40,6 +41,7 @@ declare global {
 export const useSpeechRecognition = ({
   language,
   onResult,
+  onInterim,
   onError
 }: SpeechRecognitionOptions) => {
   const isSupported = useMemo(() => {
@@ -62,9 +64,8 @@ export const useSpeechRecognition = ({
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     
-    // More aggressive settings for better capture
-    recognition.continuous = false; // Will auto-restart on error
-    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.interimResults = true; // ✅ Enable interim results
     recognition.maxAlternatives = 1;
     recognition.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
     
@@ -79,6 +80,7 @@ export const useSpeechRecognition = ({
       
       try {
         let finalTranscript = '';
+        let interimTranscript = '';
         
         // Process all results
         for (let i = 0; i < event.results.length; i++) {
@@ -89,9 +91,14 @@ export const useSpeechRecognition = ({
             finalTranscript += transcript;
             console.log('✅ FINAL:', transcript, '| Confidence:', result[0].confidence);
           } else {
-            // Just log interim results, no need to store
+            interimTranscript += transcript;
             console.log('⏳ INTERIM:', transcript);
           }
+        }
+        
+        // ✅ Send interim results in real-time
+        if (interimTranscript && onInterim) {
+          onInterim(interimTranscript);
         }
         
         // Send final result
@@ -125,7 +132,6 @@ export const useSpeechRecognition = ({
       switch (event.error) {
         case 'no-speech':
           console.log('🔄 No speech - will auto-restart...');
-          // Auto-restart after short delay
           restartTimeoutRef.current = window.setTimeout(() => {
             if (isListening && recognitionRef.current) {
               try {
@@ -196,7 +202,7 @@ export const useSpeechRecognition = ({
         }
       }
     };
-  }, [language, onResult, onError, isSupported, isListening]);
+  }, [language, onResult, onInterim, onError, isSupported, isListening]);
 
   const startListening = () => {
     console.log('🎬 startListening called');
