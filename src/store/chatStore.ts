@@ -48,6 +48,27 @@ interface ChatStore {
 
 let currentAudio: HTMLAudioElement | null = null;
 
+// Auto-detect language from text content
+const detectLanguage = (text: string): 'hi' | 'en' => {
+  // Check for Devanagari script (Hindi characters: अ-ह)
+  const devanagariPattern = /[\u0900-\u097F]/;
+  const hasDevanagari = devanagariPattern.test(text);
+  
+  if (hasDevanagari) {
+    // Count Hindi vs English characters
+    const hindiChars = (text.match(/[\u0900-\u097F]/g) || []).length;
+    const totalChars = text.replace(/\s/g, '').length;
+    const hindiPercentage = (hindiChars / totalChars) * 100;
+    
+    // If more than 20% Hindi characters, treat as Hindi
+    if (hindiPercentage > 20) {
+      return 'hi';
+    }
+  }
+  
+  return 'en';
+};
+
 // Advanced text cleaning for natural, flowing speech
 const cleanTextForTTS = (text: string): string => {
   let cleaned = text;
@@ -82,31 +103,28 @@ const cleanTextForTTS = (text: string): string => {
   cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, '');
   
   // Step 7: Convert headings (text ending with colon) to natural speech
-  // "सही जगह और मिट्टी:" becomes "सही जगह और मिट्टी।"
-  cleaned = cleaned.replace(/([^:]):\s*$/gm, '$1।');
-  cleaned = cleaned.replace(/([^:]):\s*\n/g, '$1। ');
+  cleaned = cleaned.replace(/([^:]):\s*$/gm, '$1.');
+  cleaned = cleaned.replace(/([^:]):\s*\n/g, '$1. ');
   
-  // Step 8: Handle parentheses naturally
-  // "(cutting)" becomes "यानी cutting" for better flow
-  cleaned = cleaned.replace(/\(([^)]+)\)/g, ' यानी $1 ');
+  // Step 8: Handle parentheses naturally - remove them but keep content
+  cleaned = cleaned.replace(/\(([^)]+)\)/g, ' $1 ');
   
   // Step 9: Convert line breaks to natural pauses
-  cleaned = cleaned.replace(/\n{3,}/g, '। ');  // Multiple breaks = full stop
-  cleaned = cleaned.replace(/\n\n/g, '। ');     // Double break = full stop
-  cleaned = cleaned.replace(/\n/g, '। ');       // Single break = full stop
+  cleaned = cleaned.replace(/\n{3,}/g, '. ');  // Multiple breaks = full stop
+  cleaned = cleaned.replace(/\n\n/g, '. ');     // Double break = full stop
+  cleaned = cleaned.replace(/\n/g, ' ');        // Single break = space
   
   // Step 10: Clean up punctuation
-  cleaned = cleaned.replace(/\.{2,}/g, '।');    // Multiple dots to single Devanagari full stop
+  cleaned = cleaned.replace(/\.{2,}/g, '.');    // Multiple dots to single
   cleaned = cleaned.replace(/,{2,}/g, ',');     // Multiple commas to single
   cleaned = cleaned.replace(/!{2,}/g, '!');     // Multiple exclamations to single
   
   // Step 11: Fix spacing around punctuation
-  cleaned = cleaned.replace(/\s+([,.!?;।])/g, '$1');      // Remove space before punctuation
-  cleaned = cleaned.replace(/([,.!?;।])\s*/g, '$1 ');    // Add single space after
+  cleaned = cleaned.replace(/\s+([,.!?;:])/g, '$1');      // Remove space before punctuation
+  cleaned = cleaned.replace(/([,.!?;:])\s*/g, '$1 ');     // Add single space after
   
-  // Step 12: Handle numbers and ranges naturally
-  // Keep "7-8" as is, don't break it up
-  cleaned = cleaned.replace(/(\d+)\s*-\s*(\d+)/g, '$1 से $2');  // "7-8" becomes "7 से 8"
+  // Step 12: Handle numbers naturally
+  cleaned = cleaned.replace(/(\d+)\s*-\s*(\d+)/g, '$1 से $2');  // "5-10" → "5 से 10"
   
   // Step 13: Remove extra whitespace
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
@@ -115,8 +133,8 @@ const cleanTextForTTS = (text: string): string => {
   cleaned = cleaned.trim();
   
   // Step 15: Ensure proper sentence endings
-  if (cleaned && !cleaned.match(/[।.!?]$/)) {
-    cleaned += '।';
+  if (cleaned && !cleaned.match(/[.!?]$/)) {
+    cleaned += '.';
   }
   
   return cleaned;
@@ -169,15 +187,11 @@ const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
               console.log(`  ${index + 1}. ${voice.name} (${voice.lang}) ${voice.localService ? '[Local]' : '[Remote]'}`);
             });
             
-            // Prefer Google voices, then any local voice, then first available
-            selectedVoice = 
-              hindiVoices.find(v => v.name.toLowerCase().includes('google')) ||
-              hindiVoices.find(v => v.localService) ||
-              hindiVoices[0];
-            
+            // Select first Hindi voice
+            selectedVoice = hindiVoices[0];
             console.log('✅ Selected Hindi voice:', selectedVoice.name, selectedVoice.lang);
           } else {
-            console.warn('⚠️ No Hindi voices found! Will use default system voice.');
+            console.warn('⚠️ No Hindi voices found!');
           }
         } else {
           // Find English voices
@@ -191,7 +205,6 @@ const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
             // Prefer Indian English for farming context
             selectedVoice = 
               englishVoices.find(v => v.lang === 'en-IN') ||
-              englishVoices.find(v => v.name.toLowerCase().includes('google')) ||
               englishVoices[0];
             
             console.log('✅ Selected English voice:', selectedVoice.name, selectedVoice.lang);
@@ -217,9 +230,9 @@ const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
         };
 
         utterance.onerror = (event) => {
-          console.error('❌ Speech error:', event.error, event);
+          console.error('❌ Speech error:', event.error);
           
-          // If interrupted, resolve anyway (user might have stopped it)
+          // If interrupted, resolve anyway
           if (event.error === 'interrupted' || event.error === 'canceled') {
             resolve();
           } else {
@@ -229,9 +242,6 @@ const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
 
         // Start speaking
         window.speechSynthesis.speak(utterance);
-        
-        // Debug log
-        console.log('🎤 Speaking text preview:', text.substring(0, 100) + '...');
       }, 100);
     } catch (error) {
       console.error('❌ TTS initialization error:', error);
@@ -308,11 +318,17 @@ export const useChatStore = create<ChatStore>()(
             )
           });
 
-          // Clean and optimize text for natural speech
+          // Clean text for natural speech
           const cleanedText = cleanTextForTTS(text);
+          
+          // Auto-detect language from text content
+          const detectedLanguage = detectLanguage(cleanedText);
+          
           console.log('🧹 Original text length:', text.length);
           console.log('🧹 Cleaned text length:', cleanedText.length);
-          console.log('🧹 Preview:', cleanedText.substring(0, 150) + '...');
+          console.log('🌐 UI language setting:', get().language);
+          console.log('🌐 Auto-detected language:', detectedLanguage);
+          console.log('🧹 Text preview:', cleanedText.substring(0, 150) + '...');
 
           // Try ElevenLabs first (premium quality)
           let usingElevenLabs = false;
@@ -321,7 +337,7 @@ export const useChatStore = create<ChatStore>()(
             
             const response = await api.post('/chat/text-to-speech', {
               text: cleanedText,
-              language: get().language
+              language: detectedLanguage
             }, {
               responseType: 'blob',
               timeout: 10000
@@ -349,7 +365,7 @@ export const useChatStore = create<ChatStore>()(
                 console.warn('⚠️ Audio playback failed, switching to browser TTS');
                 URL.revokeObjectURL(audioUrl);
                 
-                playBrowserTTS(cleanedText, get().language)
+                playBrowserTTS(cleanedText, detectedLanguage)
                   .finally(() => {
                     set({
                       messages: get().messages.map(msg =>
@@ -372,8 +388,8 @@ export const useChatStore = create<ChatStore>()(
 
           // Fallback to browser TTS (always works)
           if (!usingElevenLabs) {
-            console.log('🔊 Using browser TTS (high quality mode)');
-            await playBrowserTTS(cleanedText, get().language);
+            console.log('🔊 Using browser TTS with auto-detected language');
+            await playBrowserTTS(cleanedText, detectedLanguage);
             
             set({
               messages: get().messages.map(msg =>
