@@ -47,6 +47,67 @@ interface ChatStore {
 }
 
 let currentAudio: HTMLAudioElement | null = null;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let currentSpeechSynthesis: SpeechSynthesisUtterance | null = null;
+
+
+// Helper function to play browser TTS
+const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    try {
+      // Stop any existing speech
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Set language
+      utterance.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
+      
+      // Set voice properties for better quality
+      utterance.rate = 0.9;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+
+      // Try to find the best voice
+      const voices = window.speechSynthesis.getVoices();
+      const targetLang = language === 'hi' ? 'hi' : 'en';
+      
+      // Prefer local voices first
+      let preferredVoice = voices.find(voice => 
+        voice.lang.startsWith(targetLang) && voice.localService
+      );
+      
+      // Fallback to any voice with the language
+      if (!preferredVoice) {
+        preferredVoice = voices.find(voice => 
+          voice.lang.startsWith(targetLang)
+        );
+      }
+      
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onend = () => {
+        currentSpeechSynthesis = null;
+        resolve();
+      };
+
+      utterance.onerror = (event) => {
+        console.error('Speech synthesis error:', event);
+        currentSpeechSynthesis = null;
+        reject(event);
+      };
+
+      currentSpeechSynthesis = utterance;
+      window.speechSynthesis.speak(utterance);
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
 
 export const useChatStore = create<ChatStore>()(
   persist(
@@ -99,9 +160,13 @@ export const useChatStore = create<ChatStore>()(
 
       playAudio: async (messageId: string, text: string) => {
         try {
+          // Stop any existing audio
           if (currentAudio) {
             currentAudio.pause();
             currentAudio = null;
+          }
+          if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
           }
 
           set({
@@ -112,18 +177,70 @@ export const useChatStore = create<ChatStore>()(
             )
           });
 
-          const response = await api.post('/chat/text-to-speech', {
-            text,
-            language: get().language
-          }, {
-            responseType: 'blob'
-          });
+          // Try ElevenLabs first
+          let usingElevenLabs = false;
+          try {
+            console.log('🎙️ Trying ElevenLabs TTS...');
+            
+            const response = await api.post('/chat/text-to-speech', {
+              text,
+              language: get().language
+            }, {
+              responseType: 'blob',
+              timeout: 10000 // 10 second timeout
+            });
 
-          const audioBlob = new Blob([response.data], { type: 'audio/mpeg' });
-          const audioUrl = URL.createObjectURL(audioBlob);
-          currentAudio = new Audio(audioUrl);
+            // Check if we got a valid audio response
+            if (response.data && response.data.size > 0) {
+              console.log('✅ ElevenLabs TTS success!');
+              
+              const audioBlob = new Blob([response.data], { type: 'audio/mpeg' });
+              const audioUrl = URL.createObjectURL(audioBlob);
+              currentAudio = new Audio(audioUrl);
 
-          currentAudio.onended = () => {
+              currentAudio.onended = () => {
+                set({
+                  messages: get().messages.map(msg =>
+                    msg.id === messageId
+                      ? { ...msg, isAudioPlaying: false }
+                      : msg
+                  )
+                });
+                URL.revokeObjectURL(audioUrl);
+              };
+
+              currentAudio.onerror = () => {
+                console.warn('⚠️ Audio playback error, falling back to browser TTS');
+                URL.revokeObjectURL(audioUrl);
+                
+                // Fallback to browser TTS
+                playBrowserTTS(text, get().language)
+                  .finally(() => {
+                    set({
+                      messages: get().messages.map(msg =>
+                        msg.id === messageId
+                          ? { ...msg, isAudioPlaying: false }
+                          : msg
+                      )
+                    });
+                  });
+              };
+
+              await currentAudio.play();
+              usingElevenLabs = true;
+            }
+          } catch (elevenLabsError) {
+            // ElevenLabs failed, use browser TTS as fallback
+            console.warn('⚠️ ElevenLabs unavailable, using browser TTS:', 
+              elevenLabsError instanceof Error ? elevenLabsError.message : 'Unknown error'
+            );
+          }
+
+          // If ElevenLabs didn't work, use browser TTS
+          if (!usingElevenLabs) {
+            console.log('🔊 Using browser TTS...');
+            await playBrowserTTS(text, get().language);
+            
             set({
               messages: get().messages.map(msg =>
                 msg.id === messageId
@@ -131,10 +248,7 @@ export const useChatStore = create<ChatStore>()(
                   : msg
               )
             });
-            URL.revokeObjectURL(audioUrl);
-          };
-
-          await currentAudio.play();
+          }
         } catch (error) {
           console.error('Play audio error:', error);
           set({
@@ -152,6 +266,10 @@ export const useChatStore = create<ChatStore>()(
           currentAudio.pause();
           currentAudio = null;
         }
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel();
+        }
+        currentSpeechSynthesis = null;
         set({
           messages: get().messages.map(msg => ({
             ...msg,

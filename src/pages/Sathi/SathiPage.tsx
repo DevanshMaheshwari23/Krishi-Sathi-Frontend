@@ -23,10 +23,12 @@ import ReactMarkdown from 'react-markdown';
 import { Button } from '../../components/ui/Button';
 import { cn } from '../../lib/cn';
 
+
 export const SathiPage = () => {
   const [input, setInput] = useState('');
   const [showQuickActions, setShowQuickActions] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
   
   const { 
     messages, 
@@ -118,6 +120,35 @@ export const SathiPage = () => {
       toast('Listening... Speak now!', { icon: '🎤' });
     }
   };
+  // Inside SathiPage component, add this after all the const declarations:
+useEffect(() => {
+  // Load voices for speech synthesis
+  const loadVoices = () => {
+    const voices = window.speechSynthesis.getVoices();
+    console.log('🔊 Available voices:', voices.length);
+    
+    // Log Hindi voices
+    const hindiVoices = voices.filter(v => v.lang.startsWith('hi'));
+    if (hindiVoices.length > 0) {
+      console.log('✅ Hindi voices:', hindiVoices.map(v => v.name));
+    }
+    
+    // Log English voices
+    const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+    if (englishVoices.length > 0) {
+      console.log('✅ English voices:', englishVoices.map(v => v.name));
+    }
+  };
+  
+  // Load immediately
+  loadVoices();
+  
+  // Some browsers need this event
+  if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
+}, []);
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
