@@ -12,9 +12,12 @@ import {
   Sprout,
   Bug,
   Trash2,
-  MessageCircle
+  MessageCircle,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import toast from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
 import { Button } from '../../components/ui/Button';
@@ -37,6 +40,18 @@ export const SathiPage = () => {
     getCropAdvice,
     analyzePest
   } = useChatStore();
+
+  // Speech Recognition
+  const { isListening, isSupported, startListening, stopListening } = useSpeechRecognition({
+    language,
+    onResult: (transcript) => {
+      setInput(transcript);
+      toast.success(`Heard: ${transcript.slice(0, 50)}...`);
+    },
+    onError: (error) => {
+      toast.error(error);
+    }
+  });
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -91,6 +106,19 @@ export const SathiPage = () => {
     }
   };
 
+  const toggleVoiceInput = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      if (!isSupported) {
+        toast.error('Voice input not supported in this browser');
+        return;
+      }
+      startListening();
+      toast('Listening... Speak now!', { icon: '🎤' });
+    }
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -122,7 +150,7 @@ export const SathiPage = () => {
                     Sathi AI
                   </h1>
                   <p className="text-sm text-[var(--text-muted)]">
-                    {language === 'hi' ? 'आपका कृषि सहायक' : 'Your farming assistant'}
+                    {language === 'hi' ? 'आपका कृषि सहायक - बोलें या लिखें' : 'Your farming assistant - Speak or type'}
                   </p>
                 </div>
               </div>
@@ -295,6 +323,21 @@ export const SathiPage = () => {
               </motion.div>
             ))}
 
+            {isListening && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex justify-center"
+              >
+                <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2">
+                  <Mic className="h-5 w-5 text-red-500 animate-pulse" />
+                  <span className="text-sm text-[var(--text)]">
+                    {language === 'hi' ? 'सुन रहा हूँ...' : 'Listening...'}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+
             {isLoading && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -328,21 +371,38 @@ export const SathiPage = () => {
           className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
         >
           <div className="flex items-end gap-3">
+            {/* Voice Input Button */}
+            <Button
+              onClick={toggleVoiceInput}
+              disabled={isLoading}
+              variant={isListening ? "danger" : "secondary"}
+              size="sm"
+              className="h-12 w-12 rounded-[var(--radius-md)]"
+              title={isListening ? 'Stop listening' : 'Start voice input'}
+            >
+              {isListening ? (
+                <MicOff className="h-5 w-5" />
+              ) : (
+                <Mic className="h-5 w-5" />
+              )}
+            </Button>
+
             <div className="relative flex-1">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder={language === 'hi' ? 'खेती के बारे में कुछ पूछें...' : 'Ask me about farming...'}
+                placeholder={language === 'hi' ? 'खेती के बारे में कुछ पूछें या माइक दबाएं...' : 'Ask about farming or press mic...'}
                 className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] px-4 py-3 text-[var(--text)] placeholder-[var(--text-muted)] outline-none transition-all focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[var(--border)]"
                 rows={1}
                 style={{ maxHeight: '120px', minHeight: '48px' }}
-                disabled={isLoading}
+                disabled={isLoading || isListening}
               />
             </div>
+
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isLoading || isListening}
               variant="primary"
               size="sm"
               className="h-12 w-12 rounded-[var(--radius-md)]"
@@ -358,8 +418,8 @@ export const SathiPage = () => {
           <div className="mt-3 flex items-center justify-between px-2">
             <p className="text-xs text-[var(--text-muted)]">
               {language === 'hi' 
-                ? '⌨️ Enter से भेजें • Shift+Enter से नई लाइन'
-                : '⌨️ Press Enter to send • Shift+Enter for new line'}
+                ? '🎤 बोलें या ⌨️ लिखें • Enter से भेजें'
+                : '🎤 Speak or ⌨️ Type • Press Enter to send'}
             </p>
             <div className="flex items-center gap-2">
               <span className="text-xs text-[var(--text-muted)]">Powered by</span>

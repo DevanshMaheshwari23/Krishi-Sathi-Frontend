@@ -30,6 +30,7 @@ interface ChatStore {
   conversations: Conversation[];
   conversationId: string | null;
   isLoading: boolean;
+  isListening: boolean;
   language: 'en' | 'hi';
   
   sendMessage: (content: string) => Promise<void>;
@@ -40,6 +41,7 @@ interface ChatStore {
   loadConversation: (id: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   setLanguage: (lang: 'en' | 'hi') => void;
+  setIsListening: (listening: boolean) => void;
   getCropAdvice: (cropType: string) => Promise<void>;
   analyzePest: (description: string, cropType?: string) => Promise<void>;
 }
@@ -53,6 +55,7 @@ export const useChatStore = create<ChatStore>()(
       conversations: [],
       conversationId: null,
       isLoading: false,
+      isListening: false,
       language: 'en',
 
       sendMessage: async (content: string) => {
@@ -219,6 +222,10 @@ export const useChatStore = create<ChatStore>()(
 
       setLanguage: (lang: 'en' | 'hi') => {
         set({ language: lang });
+      },
+
+      setIsListening: (listening: boolean) => {
+        set({ isListening: listening });
       },
 
       getCropAdvice: async (cropType: string) => {
