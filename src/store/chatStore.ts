@@ -48,147 +48,193 @@ interface ChatStore {
 
 let currentAudio: HTMLAudioElement | null = null;
 
-// Helper function to clean markdown and format text for natural TTS speech
+// Advanced text cleaning for natural, flowing speech
 const cleanTextForTTS = (text: string): string => {
   let cleaned = text;
   
-  // Remove markdown bold/italic (preserve text)
-  cleaned = cleaned.replace(/\*\*\*(.+?)\*\*\*/g, '$1');
-  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, '$1');
-  cleaned = cleaned.replace(/\*(.+?)\*/g, '$1');
-  cleaned = cleaned.replace(/__(.+?)__/g, '$1');
-  cleaned = cleaned.replace(/_(.+?)_/g, '$1');
+  // Step 1: Remove all markdown formatting
+  cleaned = cleaned.replace(/\*\*\*(.+?)\*\*\*/g, '$1'); // ***bold italic***
+  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, '$1');     // **bold**
+  cleaned = cleaned.replace(/\*(.+?)\*/g, '$1');         // *italic*
+  cleaned = cleaned.replace(/__(.+?)__/g, '$1');         // __underline__
+  cleaned = cleaned.replace(/_(.+?)_/g, '$1');           // _italic_
+  cleaned = cleaned.replace(/~~(.+?)~~/g, '$1');         // ~~strikethrough~~
   
-  // Remove markdown headers
+  // Step 2: Remove markdown headers but keep text
   cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
   
-  // Remove code blocks
+  // Step 3: Remove code blocks and inline code
   cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
   cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
   
-  // Remove markdown links but keep text
+  // Step 4: Remove markdown links but keep the display text
   cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
   
-  // Remove emojis (they don't read well in TTS)
+  // Step 5: Remove all emojis (they sound terrible in TTS)
   cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
   cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, '');
   cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, '');
+  cleaned = cleaned.replace(/[\u{1F000}-\u{1F02F}]/gu, '');
+  cleaned = cleaned.replace(/[\u{1F0A0}-\u{1F0FF}]/gu, '');
   
-  // Remove bullet points and list markers
+  // Step 6: Handle list items - convert bullets to natural flow
   cleaned = cleaned.replace(/^\s*[-*+•]\s+/gm, '');
   cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, '');
   
-  // Convert colons at end of lines to periods (for natural speech)
-  cleaned = cleaned.replace(/:\s*$/gm, '.');
-  cleaned = cleaned.replace(/:\s*\n/g, '. ');
+  // Step 7: Convert headings (text ending with colon) to natural speech
+  // "सही जगह और मिट्टी:" becomes "सही जगह और मिट्टी।"
+  cleaned = cleaned.replace(/([^:]):\s*$/gm, '$1।');
+  cleaned = cleaned.replace(/([^:]):\s*\n/g, '$1। ');
   
-  // Convert parentheses text to comma-separated text for better flow
-  cleaned = cleaned.replace(/\(([^)]+)\)/g, ', $1,');
+  // Step 8: Handle parentheses naturally
+  // "(cutting)" becomes "यानी cutting" for better flow
+  cleaned = cleaned.replace(/\(([^)]+)\)/g, ' यानी $1 ');
   
-  // Convert multiple line breaks to periods for natural pauses
-  cleaned = cleaned.replace(/\n{3,}/g, '. ');
-  cleaned = cleaned.replace(/\n\n/g, '. ');
-  cleaned = cleaned.replace(/\n/g, ' ');
+  // Step 9: Convert line breaks to natural pauses
+  cleaned = cleaned.replace(/\n{3,}/g, '। ');  // Multiple breaks = full stop
+  cleaned = cleaned.replace(/\n\n/g, '। ');     // Double break = full stop
+  cleaned = cleaned.replace(/\n/g, '। ');       // Single break = full stop
   
-  // Clean up multiple periods
-  cleaned = cleaned.replace(/\.{2,}/g, '.');
+  // Step 10: Clean up punctuation
+  cleaned = cleaned.replace(/\.{2,}/g, '।');    // Multiple dots to single Devanagari full stop
+  cleaned = cleaned.replace(/,{2,}/g, ',');     // Multiple commas to single
+  cleaned = cleaned.replace(/!{2,}/g, '!');     // Multiple exclamations to single
   
-  // Clean up multiple commas
-  cleaned = cleaned.replace(/,{2,}/g, ',');
+  // Step 11: Fix spacing around punctuation
+  cleaned = cleaned.replace(/\s+([,.!?;।])/g, '$1');      // Remove space before punctuation
+  cleaned = cleaned.replace(/([,.!?;।])\s*/g, '$1 ');    // Add single space after
   
-  // Fix spacing around punctuation
-  cleaned = cleaned.replace(/\s+([,.!?;])/g, '$1');
-  cleaned = cleaned.replace(/([,.!?;:])\s*/g, '$1 ');
+  // Step 12: Handle numbers and ranges naturally
+  // Keep "7-8" as is, don't break it up
+  cleaned = cleaned.replace(/(\d+)\s*-\s*(\d+)/g, '$1 से $2');  // "7-8" becomes "7 से 8"
   
-  // Remove extra spaces
+  // Step 13: Remove extra whitespace
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
   
-  // Final cleanup
+  // Step 14: Final cleanup
   cleaned = cleaned.trim();
+  
+  // Step 15: Ensure proper sentence endings
+  if (cleaned && !cleaned.match(/[।.!?]$/)) {
+    cleaned += '।';
+  }
   
   return cleaned;
 };
 
-// Helper function to play browser TTS
+// Optimized browser TTS with best quality settings
 const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
   return new Promise((resolve, reject) => {
     try {
-      // Stop any existing speech
+      // Cancel any existing speech
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
       }
 
-      // Wait a bit for cancel to complete
+      // Small delay for cancel to complete
       setTimeout(() => {
         const utterance = new SpeechSynthesisUtterance(text);
         
-        // Set language code
-        const langCode = language === 'hi' ? 'hi-IN' : 'en-IN';
-        utterance.lang = langCode;
+        // Set optimal language code
+        utterance.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
         
-        // Set voice properties
-        utterance.rate = 0.85; // Slightly slower for Hindi clarity
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
+        // Optimal voice settings for natural, clear speech
+        if (language === 'hi') {
+          utterance.rate = 0.85;   // Slightly slower for Hindi clarity
+          utterance.pitch = 1.0;   // Natural pitch
+          utterance.volume = 1.0;  // Full volume
+        } else {
+          utterance.rate = 0.9;    // Normal speed for English
+          utterance.pitch = 1.0;
+          utterance.volume = 1.0;
+        }
 
-        // Get available voices
+        // Get all available voices
         const voices = window.speechSynthesis.getVoices();
         console.log('📢 Total voices available:', voices.length);
         
-        // Filter Hindi voices
-        const hindiVoices = voices.filter(voice => 
-          voice.lang.toLowerCase().includes('hi')
-        );
-        console.log('🇮🇳 Hindi voices found:', hindiVoices.length);
-        
-        if (hindiVoices.length > 0) {
-          hindiVoices.forEach((voice, index) => {
-            console.log(`  ${index + 1}. ${voice.name} (${voice.lang})`);
-          });
-        }
-        
-        // Select best voice
         let selectedVoice = null;
         
-        if (language === 'hi' && hindiVoices.length > 0) {
-          // Prefer Google Hindi voice
-          selectedVoice = hindiVoices.find(v => v.name.includes('Google')) ||
-                         hindiVoices.find(v => v.name.includes('हिन्दी')) ||
-                         hindiVoices[0];
-        } else if (language === 'en') {
-          const englishVoices = voices.filter(v => 
-            v.lang.toLowerCase().includes('en')
+        if (language === 'hi') {
+          // Find all Hindi voices
+          const hindiVoices = voices.filter(voice => 
+            voice.lang.toLowerCase().startsWith('hi')
           );
-          selectedVoice = englishVoices.find(v => v.name.includes('Google')) ||
-                         englishVoices[0];
+          
+          console.log('🇮🇳 Hindi voices found:', hindiVoices.length);
+          
+          if (hindiVoices.length > 0) {
+            console.log('Available Hindi voices:');
+            hindiVoices.forEach((voice, index) => {
+              console.log(`  ${index + 1}. ${voice.name} (${voice.lang}) ${voice.localService ? '[Local]' : '[Remote]'}`);
+            });
+            
+            // Prefer Google voices, then any local voice, then first available
+            selectedVoice = 
+              hindiVoices.find(v => v.name.toLowerCase().includes('google')) ||
+              hindiVoices.find(v => v.localService) ||
+              hindiVoices[0];
+            
+            console.log('✅ Selected Hindi voice:', selectedVoice.name, selectedVoice.lang);
+          } else {
+            console.warn('⚠️ No Hindi voices found! Will use default system voice.');
+          }
+        } else {
+          // Find English voices
+          const englishVoices = voices.filter(v => 
+            v.lang.toLowerCase().startsWith('en')
+          );
+          
+          console.log('🇬🇧 English voices found:', englishVoices.length);
+          
+          if (englishVoices.length > 0) {
+            // Prefer Indian English for farming context
+            selectedVoice = 
+              englishVoices.find(v => v.lang === 'en-IN') ||
+              englishVoices.find(v => v.name.toLowerCase().includes('google')) ||
+              englishVoices[0];
+            
+            console.log('✅ Selected English voice:', selectedVoice.name, selectedVoice.lang);
+          }
         }
         
+        // Apply selected voice
         if (selectedVoice) {
           utterance.voice = selectedVoice;
-          console.log('✅ Selected voice:', selectedVoice.name, selectedVoice.lang);
-        } else {
-          console.warn('⚠️ No suitable voice found, using default');
         }
 
+        // Event handlers
         utterance.onstart = () => {
           console.log('🔊 Speech started');
+          console.log('   Voice:', utterance.voice?.name || 'System Default');
+          console.log('   Lang:', utterance.lang);
+          console.log('   Rate:', utterance.rate);
         };
 
         utterance.onend = () => {
-          console.log('✅ Speech ended');
+          console.log('✅ Speech completed successfully');
           resolve();
         };
 
         utterance.onerror = (event) => {
-          console.error('❌ Speech error:', event.error);
-          reject(new Error(`Speech error: ${event.error}`));
+          console.error('❌ Speech error:', event.error, event);
+          
+          // If interrupted, resolve anyway (user might have stopped it)
+          if (event.error === 'interrupted' || event.error === 'canceled') {
+            resolve();
+          } else {
+            reject(new Error(`Speech error: ${event.error}`));
+          }
         };
 
-        // Speak
+        // Start speaking
         window.speechSynthesis.speak(utterance);
+        
+        // Debug log
+        console.log('🎤 Speaking text preview:', text.substring(0, 100) + '...');
       }, 100);
     } catch (error) {
-      console.error('❌ TTS setup error:', error);
+      console.error('❌ TTS initialization error:', error);
       reject(error);
     }
   });
@@ -262,14 +308,16 @@ export const useChatStore = create<ChatStore>()(
             )
           });
 
-          // Clean the text before sending to TTS
+          // Clean and optimize text for natural speech
           const cleanedText = cleanTextForTTS(text);
-          console.log('🧹 Cleaned text for TTS:', cleanedText.substring(0, 200) + '...');
+          console.log('🧹 Original text length:', text.length);
+          console.log('🧹 Cleaned text length:', cleanedText.length);
+          console.log('🧹 Preview:', cleanedText.substring(0, 150) + '...');
 
-          // Try ElevenLabs first
+          // Try ElevenLabs first (premium quality)
           let usingElevenLabs = false;
           try {
-            console.log('🎙️ Trying ElevenLabs TTS...');
+            console.log('🎙️ Attempting ElevenLabs TTS...');
             
             const response = await api.post('/chat/text-to-speech', {
               text: cleanedText,
@@ -280,7 +328,7 @@ export const useChatStore = create<ChatStore>()(
             });
 
             if (response.data && response.data.size > 0) {
-              console.log('✅ ElevenLabs TTS success!');
+              console.log('✅ ElevenLabs TTS successful');
               
               const audioBlob = new Blob([response.data], { type: 'audio/mpeg' });
               const audioUrl = URL.createObjectURL(audioBlob);
@@ -298,7 +346,7 @@ export const useChatStore = create<ChatStore>()(
               };
 
               currentAudio.onerror = () => {
-                console.warn('⚠️ Audio playback error, falling back to browser TTS');
+                console.warn('⚠️ Audio playback failed, switching to browser TTS');
                 URL.revokeObjectURL(audioUrl);
                 
                 playBrowserTTS(cleanedText, get().language)
@@ -317,14 +365,14 @@ export const useChatStore = create<ChatStore>()(
               usingElevenLabs = true;
             }
           } catch (elevenLabsError) {
-            console.warn('⚠️ ElevenLabs unavailable, using browser TTS:', 
+            console.warn('⚠️ ElevenLabs unavailable:', 
               elevenLabsError instanceof Error ? elevenLabsError.message : 'Unknown error'
             );
           }
 
-          // If ElevenLabs didn't work, use browser TTS
+          // Fallback to browser TTS (always works)
           if (!usingElevenLabs) {
-            console.log('🔊 Using browser TTS...');
+            console.log('🔊 Using browser TTS (high quality mode)');
             await playBrowserTTS(cleanedText, get().language);
             
             set({
@@ -336,7 +384,7 @@ export const useChatStore = create<ChatStore>()(
             });
           }
         } catch (error) {
-          console.error('Play audio error:', error);
+          console.error('❌ Audio playback error:', error);
           set({
             messages: get().messages.map(msg =>
               msg.id === messageId
