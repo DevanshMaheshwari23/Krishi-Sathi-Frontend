@@ -47,7 +47,7 @@ export const SathiPage = () => {
 
     try {
       await sendMessage(message);
-    } catch (error) {
+    } catch {
       toast.error('Failed to send message');
     }
   };
@@ -67,7 +67,7 @@ export const SathiPage = () => {
       if (crop) {
         try {
           await getCropAdvice(crop);
-        } catch (error) {
+        } catch {
           toast.error('Failed to get crop advice');
         }
       }
@@ -76,7 +76,7 @@ export const SathiPage = () => {
       if (description) {
         try {
           await analyzePest(description);
-        } catch (error) {
+        } catch {
           toast.error('Failed to analyze pest issue');
         }
       }
@@ -118,7 +118,7 @@ export const SathiPage = () => {
                   <Bot className="h-7 w-7 text-white" />
                 </div>
                 <div>
-                  <h1 className="font-[var(--font-display)] text-3xl font-bold text-[var(--text)]">
+                  <h1 className="text-3xl font-bold text-[var(--text)]">
                     Sathi AI
                   </h1>
                   <p className="text-sm text-[var(--text-muted)]">
@@ -169,7 +169,7 @@ export const SathiPage = () => {
                 className="flex h-full flex-col items-center justify-center px-4 text-center"
               >
                 <Sparkles className="mb-6 h-20 w-20 text-[var(--primary)]" />
-                <h2 className="mb-3 font-[var(--font-display)] text-3xl font-bold text-[var(--text)]">
+                <h2 className="mb-3 text-3xl font-bold text-[var(--text)]">
                   {language === 'hi' ? 'नमस्ते! मैं साथी हूँ' : 'Welcome to Sathi AI'}
                 </h2>
                 <p className="mb-8 max-w-2xl text-lg text-[var(--text-muted)]">
@@ -343,7 +343,7 @@ export const SathiPage = () => {
             <Button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              variant="default"
+              variant="primary"
               size="sm"
               className="h-12 w-12 rounded-[var(--radius-md)]"
             >

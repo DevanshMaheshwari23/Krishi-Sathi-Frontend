@@ -19,6 +19,12 @@ export interface Conversation {
   language: string;
 }
 
+interface ApiMessage {
+  role: 'user' | 'model';
+  parts: string;
+  timestamp: string;
+}
+
 interface ChatStore {
   messages: Message[];
   conversations: Conversation[];
@@ -173,7 +179,7 @@ export const useChatStore = create<ChatStore>()(
         try {
           const response = await api.get(`/chat/conversations/${id}`);
           
-          const messages = response.data.conversation.messages.map((msg: any, index: number) => ({
+          const messages = response.data.conversation.messages.map((msg: ApiMessage, index: number) => ({
             id: `${id}-${index}`,
             role: msg.role,
             content: msg.parts,
