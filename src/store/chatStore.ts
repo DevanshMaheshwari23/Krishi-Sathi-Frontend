@@ -48,49 +48,62 @@ interface ChatStore {
 
 let currentAudio: HTMLAudioElement | null = null;
 
-// Helper function to clean markdown and format text for TTS
+// Helper function to clean markdown and format text for natural TTS speech
 const cleanTextForTTS = (text: string): string => {
   let cleaned = text;
   
-  // Remove markdown bold/italic (but preserve the text)
-  cleaned = cleaned.replace(/\*\*\*(.+?)\*\*\*/g, '$1'); // ***text***
-  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, '$1');     // **text**
-  cleaned = cleaned.replace(/\*(.+?)\*/g, '$1');         // *text*
-  cleaned = cleaned.replace(/__(.+?)__/g, '$1');         // __text__
-  cleaned = cleaned.replace(/_(.+?)_/g, '$1');           // _text_
+  // Remove markdown bold/italic (preserve text)
+  cleaned = cleaned.replace(/\*\*\*(.+?)\*\*\*/g, '$1');
+  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, '$1');
+  cleaned = cleaned.replace(/\*(.+?)\*/g, '$1');
+  cleaned = cleaned.replace(/__(.+?)__/g, '$1');
+  cleaned = cleaned.replace(/_(.+?)_/g, '$1');
   
-  // Remove markdown headers (keep the text)
+  // Remove markdown headers
   cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
-  
-  // Remove markdown bullet points but keep numbers and content
-  cleaned = cleaned.replace(/^\s*[-*+]\s+/gm, '');
-  cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, ''); // Remove list numbers like "1. "
   
   // Remove code blocks
   cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
   cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
   
-  // Remove markdown links but keep link text
+  // Remove markdown links but keep text
   cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
   
-  // Remove emojis (they don't sound good in TTS)
-  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}]/gu, ' ');
-  cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, ' ');
-  cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, ' ');
+  // Remove emojis (they don't read well in TTS)
+  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
+  cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, '');
+  cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, '');
   
-  // Convert markdown line breaks to spaces
-  cleaned = cleaned.replace(/\n{3,}/g, '. ');  // Multiple line breaks to period + space
-  cleaned = cleaned.replace(/\n\n/g, '. ');     // Double line breaks to period
-  cleaned = cleaned.replace(/\n/g, ' ');        // Single line breaks to space
+  // Remove bullet points and list markers
+  cleaned = cleaned.replace(/^\s*[-*+•]\s+/gm, '');
+  cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, '');
   
-  // Clean up multiple spaces but preserve single spaces
+  // Convert colons at end of lines to periods (for natural speech)
+  cleaned = cleaned.replace(/:\s*$/gm, '.');
+  cleaned = cleaned.replace(/:\s*\n/g, '. ');
+  
+  // Convert parentheses text to comma-separated text for better flow
+  cleaned = cleaned.replace(/\(([^)]+)\)/g, ', $1,');
+  
+  // Convert multiple line breaks to periods for natural pauses
+  cleaned = cleaned.replace(/\n{3,}/g, '. ');
+  cleaned = cleaned.replace(/\n\n/g, '. ');
+  cleaned = cleaned.replace(/\n/g, ' ');
+  
+  // Clean up multiple periods
+  cleaned = cleaned.replace(/\.{2,}/g, '.');
+  
+  // Clean up multiple commas
+  cleaned = cleaned.replace(/,{2,}/g, ',');
+  
+  // Fix spacing around punctuation
+  cleaned = cleaned.replace(/\s+([,.!?;])/g, '$1');
+  cleaned = cleaned.replace(/([,.!?;:])\s*/g, '$1 ');
+  
+  // Remove extra spaces
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
   
-  // Clean up spacing around punctuation (but keep the punctuation!)
-  cleaned = cleaned.replace(/\s+([,.!?;:])/g, '$1'); // Remove space before punctuation
-  cleaned = cleaned.replace(/([,.!?;:])\s*/g, '$1 '); // Add single space after punctuation
-  
-  // Final trim
+  // Final cleanup
   cleaned = cleaned.trim();
   
   return cleaned;
@@ -221,7 +234,7 @@ export const useChatStore = create<ChatStore>()(
 
           // Clean the text before sending to TTS
           const cleanedText = cleanTextForTTS(text);
-          console.log('🧹 Cleaned text preview:', cleanedText.substring(0, 200));
+          console.log('🧹 Cleaned text for TTS:', cleanedText.substring(0, 300) + '...');
 
           // Try ElevenLabs first
           let usingElevenLabs = false;
