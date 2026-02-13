@@ -48,6 +48,46 @@ interface ChatStore {
 
 let currentAudio: HTMLAudioElement | null = null;
 
+// Helper function to clean markdown and format text for TTS
+const cleanTextForTTS = (text: string): string => {
+  let cleaned = text;
+  
+  // Remove markdown bold/italic
+  cleaned = cleaned.replace(/\*\*\*(.+?)\*\*\*/g, '$1'); // ***text***
+  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, '$1');     // **text**
+  cleaned = cleaned.replace(/\*(.+?)\*/g, '$1');         // *text*
+  cleaned = cleaned.replace(/__(.+?)__/g, '$1');         // __text__
+  cleaned = cleaned.replace(/_(.+?)_/g, '$1');           // _text_
+  
+  // Remove markdown headers
+  cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
+  
+  // Remove markdown lists (keep the content)
+  cleaned = cleaned.replace(/^\s*[-*+]\s+/gm, '');
+  cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, '');
+  
+  // Remove code blocks
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+  cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+  
+  // Remove links but keep text
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  
+  // Remove emojis (they sound weird when read)
+  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
+  cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, '');
+  cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, '');
+  
+  // Remove extra whitespace
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
+  
+  // Clean up spacing around punctuation
+  cleaned = cleaned.trim();
+  
+  return cleaned;
+};
+
 // Helper function to play browser TTS
 const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -171,20 +211,24 @@ export const useChatStore = create<ChatStore>()(
             )
           });
 
+          // Clean the text before sending to TTS
+          const cleanedText = cleanTextForTTS(text);
+          console.log('🧹 Original text length:', text.length);
+          console.log('🧹 Cleaned text length:', cleanedText.length);
+
           // Try ElevenLabs first
           let usingElevenLabs = false;
           try {
             console.log('🎙️ Trying ElevenLabs TTS...');
             
             const response = await api.post('/chat/text-to-speech', {
-              text,
+              text: cleanedText,
               language: get().language
             }, {
               responseType: 'blob',
-              timeout: 10000 // 10 second timeout
+              timeout: 10000
             });
 
-            // Check if we got a valid audio response
             if (response.data && response.data.size > 0) {
               console.log('✅ ElevenLabs TTS success!');
               
@@ -207,8 +251,7 @@ export const useChatStore = create<ChatStore>()(
                 console.warn('⚠️ Audio playback error, falling back to browser TTS');
                 URL.revokeObjectURL(audioUrl);
                 
-                // Fallback to browser TTS
-                playBrowserTTS(text, get().language)
+                playBrowserTTS(cleanedText, get().language)
                   .finally(() => {
                     set({
                       messages: get().messages.map(msg =>
@@ -224,7 +267,6 @@ export const useChatStore = create<ChatStore>()(
               usingElevenLabs = true;
             }
           } catch (elevenLabsError) {
-            // ElevenLabs failed, use browser TTS as fallback
             console.warn('⚠️ ElevenLabs unavailable, using browser TTS:', 
               elevenLabsError instanceof Error ? elevenLabsError.message : 'Unknown error'
             );
@@ -233,7 +275,7 @@ export const useChatStore = create<ChatStore>()(
           // If ElevenLabs didn't work, use browser TTS
           if (!usingElevenLabs) {
             console.log('🔊 Using browser TTS...');
-            await playBrowserTTS(text, get().language);
+            await playBrowserTTS(cleanedText, get().language);
             
             set({
               messages: get().messages.map(msg =>
