@@ -1,213 +1,375 @@
-import { useEffect, useRef, useState } from "react";
-import { Bot, MessageCircle, Send, User, Video } from "lucide-react";
-import { Badge } from "../../components/ui/Badge";
-import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
-import { Input } from "../../components/ui/Input";
-import { PageHeader, PageShell, SectionCard } from "../../components/layout/PageShell";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
-
-interface Tutorial {
-  id: string;
-  title: string;
-  duration: string;
-  language: string;
-  emoji: string;
-}
-
-const tutorials: Tutorial[] = [
-  { id: "1", title: "Wheat Cultivation Basics", duration: "12:45", language: "Hindi", emoji: "🌾" },
-  { id: "2", title: "Organic Farming Techniques", duration: "18:30", language: "English", emoji: "🌱" },
-  { id: "3", title: "Pest Control Methods", duration: "15:20", language: "Hindi", emoji: "🐛" },
-  { id: "4", title: "Irrigation Best Practices", duration: "20:15", language: "English", emoji: "💧" },
-];
-
-const quickPrompts = [
-  "How to improve soil health?",
-  "Best crops for summer?",
-  "Pest control methods",
-  "Government schemes for farmers",
-];
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Send, 
+  Bot, 
+  User, 
+  Sparkles, 
+  Loader, 
+  Volume2, 
+  VolumeX,
+  Languages,
+  Sprout,
+  Bug,
+  Trash2,
+  MessageCircle
+} from 'lucide-react';
+import { useChatStore } from '../../store/chatStore';
+import toast from 'react-hot-toast';
+import ReactMarkdown from 'react-markdown';
+import { Button } from '../../components/ui/Button';
+import { cn } from '../../lib/cn';
 
 export const SathiPage = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "init",
-      role: "assistant",
-      content:
-        "Namaste! I'm Sathi, your AI farming companion. Ask me about crop techniques, pests, weather patterns, soil health, or government schemes.",
-      timestamp: new Date(),
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const listEndRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState('');
+  const [showQuickActions, setShowQuickActions] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const { 
+    messages, 
+    isLoading, 
+    language,
+    sendMessage, 
+    playAudio, 
+    stopAudio,
+    clearChat,
+    setLanguage,
+    getCropAdvice,
+    analyzePest
+  } = useChatStore();
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const message = input.trim();
+    setInput('');
+    setShowQuickActions(false);
+
+    try {
+      await sendMessage(message);
+    } catch (error) {
+      toast.error('Failed to send message');
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleQuickAction = async (action: string) => {
+    setShowQuickActions(false);
+
+    if (action === 'crop-advice') {
+      const crop = prompt('Enter crop name (e.g., Wheat, Rice):');
+      if (crop) {
+        try {
+          await getCropAdvice(crop);
+        } catch (error) {
+          toast.error('Failed to get crop advice');
+        }
+      }
+    } else if (action === 'pest-analysis') {
+      const description = prompt('Describe the pest/disease issue:');
+      if (description) {
+        try {
+          await analyzePest(description);
+        } catch (error) {
+          toast.error('Failed to analyze pest issue');
+        }
+      }
+    }
+  };
+
+  const handleAudioToggle = (messageId: string, text: string, isPlaying?: boolean) => {
+    if (isPlaying) {
+      stopAudio();
+    } else {
+      playAudio(messageId, text);
+    }
+  };
 
   useEffect(() => {
-    listEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
-
-  const getResponse = (query: string) => {
-    const q = query.toLowerCase();
-
-    if (q.includes("wheat") || q.includes("गेहूं")) {
-      return "Wheat guidance: sow in Oct-Nov, prefer loamy soil with pH 6-7, ensure 4-6 irrigation cycles, and monitor rust/pest risk during growth stage.";
-    }
-
-    if (q.includes("pest") || q.includes("disease")) {
-      return "Use integrated pest management: field monitoring, neem-based options, crop rotation, pheromone traps, and early-stage intervention.";
-    }
-
-    if (q.includes("soil") || q.includes("मिट्टी")) {
-      return "Improve soil health with compost, green manure, pH correction, and periodic soil testing. Balanced nutrients drive better yield stability.";
-    }
-
-    if (q.includes("scheme") || q.includes("योजना")) {
-      return "Major schemes include PM-KISAN, PMFBY crop insurance, Soil Health Card, and Kisan Credit Card. Verify district-level eligibility before applying.";
-    }
-
-    return "I can help with crop planning, pest control, weather adaptation, and scheme awareness. Share your crop and region for tailored guidance.";
-  };
-
-  const pushUserMessage = (content: string) => {
-    const next = {
-      id: `u-${Date.now()}`,
-      role: "user" as const,
-      content,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, next]);
-  };
-
-  const ask = (prompt: string) => {
-    if (!prompt.trim() || loading) return;
-
-    pushUserMessage(prompt.trim());
-    setInput("");
-    setLoading(true);
-
-    window.setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `a-${Date.now()}`,
-          role: "assistant",
-          content: getResponse(prompt),
-          timestamp: new Date(),
-        },
-      ]);
-      setLoading(false);
-    }, 900);
-  };
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   return (
-    <PageShell>
-      <PageHeader
-        badge={
-          <Badge className="bg-white/20 text-white border-white/35">
-            <MessageCircle className="h-3.5 w-3.5" />
-            Always-on advisor
-          </Badge>
-        }
-        title="Sathi AI"
-        description="Get instant farming assistance, ask practical crop questions, and explore tutorial recommendations."
-      />
+    <div className="relative flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[var(--background)]">
+      {/* Background gradient */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 left-1/4 h-96 w-96 animate-pulse rounded-full bg-[var(--primary)]/10 blur-3xl" />
+        <div className="absolute -bottom-40 right-1/4 h-96 w-96 animate-pulse rounded-full bg-[var(--secondary)]/10 blur-3xl" style={{ animationDelay: '1s' }} />
+      </div>
 
-      <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <SectionCard className="xl:col-span-2" title="Conversation" description="Ask in English or Hindi">
-          <div className="flex h-[520px] flex-col">
-            <div className="mb-3 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-muted">
-              <Bot className="h-4 w-4 text-[var(--primary)]" />
-              Sathi AI is online
-            </div>
+      {/* Content */}
+      <div className="relative z-10 mx-auto flex h-full w-full max-w-5xl flex-col px-4 py-6">
+        {/* Header */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-md)] bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] shadow-lg">
+                  <Bot className="h-7 w-7 text-white" />
+                </div>
+                <div>
+                  <h1 className="font-[var(--font-display)] text-3xl font-bold text-[var(--text)]">
+                    Sathi AI
+                  </h1>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    {language === 'hi' ? 'आपका कृषि सहायक' : 'Your farming assistant'}
+                  </p>
+                </div>
+              </div>
 
-            <div className="flex-1 space-y-3 overflow-auto pr-1">
-              {messages.map((message) => (
-                <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[82%] rounded-2xl px-3 py-2 ${
-                      message.role === "user"
-                        ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                        : "bg-[var(--surface-muted)] text-[var(--text)]"
-                    }`}
+              <div className="flex items-center gap-2">
+                {/* Language Toggle */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setLanguage(language === 'en' ? 'hi' : 'en')}
+                >
+                  <Languages className="h-4 w-4" />
+                  <span className="font-medium">{language === 'en' ? 'EN' : 'हिं'}</span>
+                </Button>
+
+                {/* Clear Chat */}
+                {messages.length > 0 && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm('Clear all messages?')) {
+                        clearChat();
+                        setShowQuickActions(true);
+                      }
+                    }}
                   >
-                    <div className="mb-1 flex items-center gap-1 text-[10px] opacity-75">
-                      {message.role === "user" ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-                      <span>{message.role === "user" ? "You" : "Sathi"}</span>
-                    </div>
-                    <p className="text-sm">{message.content}</p>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Messages */}
+        <div className="mb-4 flex-1 space-y-4 overflow-y-auto pr-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[var(--border)]">
+          <AnimatePresence mode="popLayout">
+            {messages.length === 0 && showQuickActions && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="flex h-full flex-col items-center justify-center px-4 text-center"
+              >
+                <Sparkles className="mb-6 h-20 w-20 text-[var(--primary)]" />
+                <h2 className="mb-3 font-[var(--font-display)] text-3xl font-bold text-[var(--text)]">
+                  {language === 'hi' ? 'नमस्ते! मैं साथी हूँ' : 'Welcome to Sathi AI'}
+                </h2>
+                <p className="mb-8 max-w-2xl text-lg text-[var(--text-muted)]">
+                  {language === 'hi' 
+                    ? 'खेती, फसल, कीट प्रबंधन या बाजार भाव के बारे में कुछ भी पूछें!'
+                    : 'Ask me anything about farming, crops, pest management, or market prices!'}
+                </p>
+
+                {/* Quick Actions */}
+                <div className="grid w-full max-w-3xl grid-cols-1 gap-4 md:grid-cols-3">
+                  {[
+                    {
+                      icon: Sprout,
+                      title: language === 'hi' ? 'फसल सलाह' : 'Crop Advice',
+                      description: language === 'hi' ? 'खेती के सुझाव पाएं' : 'Get cultivation tips',
+                      action: 'crop-advice',
+                      gradient: 'from-green-500 to-emerald-500'
+                    },
+                    {
+                      icon: Bug,
+                      title: language === 'hi' ? 'कीट विश्लेषण' : 'Pest Analysis',
+                      description: language === 'hi' ? 'कीट समस्या का समाधान' : 'Identify pest issues',
+                      action: 'pest-analysis',
+                      gradient: 'from-red-500 to-orange-500'
+                    },
+                    {
+                      icon: MessageCircle,
+                      title: language === 'hi' ? 'सामान्य प्रश्न' : 'General Query',
+                      description: language === 'hi' ? 'कुछ भी पूछें' : 'Ask anything',
+                      action: 'general',
+                      gradient: 'from-blue-500 to-cyan-500'
+                    }
+                  ].map((action, index) => (
+                    <motion.button
+                      key={action.action}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      onClick={() => action.action !== 'general' && handleQuickAction(action.action)}
+                      className="group relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-6 transition-all hover:scale-105 hover:border-[var(--border-hover)] hover:shadow-md"
+                    >
+                      <div className={cn(
+                        "absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity group-hover:opacity-10",
+                        action.gradient
+                      )} />
+                      
+                      <div className="relative">
+                        <div className={cn(
+                          "mb-4 flex h-14 w-14 items-center justify-center rounded-[var(--radius-md)] bg-gradient-to-br shadow-lg",
+                          action.gradient
+                        )}>
+                          <action.icon className="h-7 w-7 text-white" />
+                        </div>
+                        
+                        <h3 className="mb-2 text-lg font-bold text-[var(--text)]">{action.title}</h3>
+                        <p className="text-sm text-[var(--text-muted)]">{action.description}</p>
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {messages.map((message, index) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ delay: index * 0.05 }}
+                className={cn("flex", message.role === 'user' ? 'justify-end' : 'justify-start')}
+              >
+                <div className={cn(
+                  "flex max-w-3xl items-start gap-3",
+                  message.role === 'user' && "flex-row-reverse"
+                )}>
+                  {/* Avatar */}
+                  <div className={cn(
+                    "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] shadow-lg",
+                    message.role === 'user'
+                      ? 'bg-[var(--primary)]'
+                      : 'bg-gradient-to-br from-[var(--secondary)] to-orange-500'
+                  )}>
+                    {message.role === 'user' ? (
+                      <User className="h-5 w-5 text-white" />
+                    ) : (
+                      <Bot className="h-5 w-5 text-white" />
+                    )}
+                  </div>
+
+                  {/* Message */}
+                  <div className={cn(
+                    "group relative rounded-[var(--radius-lg)] px-5 py-4 shadow-sm",
+                    message.role === 'user'
+                      ? 'bg-[var(--primary)] text-white'
+                      : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'
+                  )}>
+                    {message.role === 'model' ? (
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                        {message.content}
+                      </p>
+                    )}
+
+                    {/* Audio Button (AI messages only) */}
+                    {message.role === 'model' && (
+                      <button
+                        onClick={() => handleAudioToggle(message.id, message.content, message.isAudioPlaying)}
+                        className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface)] shadow-lg opacity-0 transition-all hover:bg-[var(--surface-hover)] group-hover:opacity-100 border border-[var(--border)]"
+                      >
+                        {message.isAudioPlaying ? (
+                          <VolumeX className="h-4 w-4 text-[var(--text)]" />
+                        ) : (
+                          <Volume2 className="h-4 w-4 text-[var(--text)]" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
-              ))}
+              </motion.div>
+            ))}
 
-              {loading ? <p className="text-sm text-soft">Sathi is typing...</p> : null}
-              <div ref={listEndRef} />
-            </div>
-
-            <form
-              className="mt-4 flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                ask(input);
-              }}
-            >
-              <Input
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="Ask about crops, pests, weather, or schemes"
-                className="flex-1"
-              />
-              <Button type="submit" disabled={!input.trim() || loading}>
-                <Send className="h-4 w-4" />
-                Send
-              </Button>
-            </form>
-          </div>
-        </SectionCard>
-
-        <div className="space-y-6">
-          <SectionCard title="Quick ask" description="Tap to ask instantly">
-            <div className="space-y-2">
-              {quickPrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => ask(prompt)}
-                  className="w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-left text-sm font-semibold text-muted transition hover:border-[var(--primary)] hover:bg-[var(--primary-soft)] disabled:opacity-60"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Video tutorials" description="Popular practical guides">
-            <div className="space-y-2">
-              {tutorials.map((item) => (
-                <Card key={item.id} className="bg-[var(--surface-muted)] p-3">
-                  <div className="flex items-start gap-3">
-                    <div className="text-2xl">{item.emoji}</div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{item.title}</p>
-                      <p className="mt-1 text-xs text-soft">
-                        {item.duration} • {item.language}
-                      </p>
-                    </div>
-                    <Video className="h-4 w-4 text-soft" />
+            {isLoading && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex justify-start"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-gradient-to-br from-[var(--secondary)] to-orange-500 shadow-lg">
+                    <Bot className="h-5 w-5 text-white" />
                   </div>
-                </Card>
-              ))}
-            </div>
-          </SectionCard>
+                  <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-5 py-4 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <Loader className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
+                      <span className="text-sm text-[var(--text-muted)]">
+                        {language === 'hi' ? 'सोच रहा हूँ...' : 'Thinking...'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div ref={messagesEndRef} />
         </div>
-      </section>
-    </PageShell>
+
+        {/* Input */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
+        >
+          <div className="flex items-end gap-3">
+            <div className="relative flex-1">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyPress}
+                placeholder={language === 'hi' ? 'खेती के बारे में कुछ पूछें...' : 'Ask me about farming...'}
+                className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] px-4 py-3 text-[var(--text)] placeholder-[var(--text-muted)] outline-none transition-all focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[var(--border)]"
+                rows={1}
+                style={{ maxHeight: '120px', minHeight: '48px' }}
+                disabled={isLoading}
+              />
+            </div>
+            <Button
+              onClick={handleSend}
+              disabled={!input.trim() || isLoading}
+              variant="default"
+              size="sm"
+              className="h-12 w-12 rounded-[var(--radius-md)]"
+            >
+              {isLoading ? (
+                <Loader className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+            </Button>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between px-2">
+            <p className="text-xs text-[var(--text-muted)]">
+              {language === 'hi' 
+                ? '⌨️ Enter से भेजें • Shift+Enter से नई लाइन'
+                : '⌨️ Press Enter to send • Shift+Enter for new line'}
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--text-muted)]">Powered by</span>
+              <span className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] bg-clip-text text-xs font-semibold text-transparent">
+                Gemini AI
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
   );
 };

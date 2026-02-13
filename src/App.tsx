@@ -5,6 +5,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { Skeleton } from "./components/ui/Skeleton";
 
+
 const LoginPage = lazy(() => import("./pages/Auth/LoginPage").then((module) => ({ default: module.LoginPage })));
 const RegisterPage = lazy(() => import("./pages/Auth/RegisterPage").then((module) => ({ default: module.RegisterPage })));
 const DashboardPage = lazy(() => import("./pages/Dashboard/DashboardPage").then((module) => ({ default: module.DashboardPage })));
