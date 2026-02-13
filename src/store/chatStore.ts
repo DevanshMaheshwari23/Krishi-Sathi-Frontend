@@ -47,9 +47,6 @@ interface ChatStore {
 }
 
 let currentAudio: HTMLAudioElement | null = null;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-let currentSpeechSynthesis: SpeechSynthesisUtterance | null = null;
-
 
 // Helper function to play browser TTS
 const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
@@ -91,17 +88,14 @@ const playBrowserTTS = (text: string, language: 'en' | 'hi'): Promise<void> => {
       }
 
       utterance.onend = () => {
-        currentSpeechSynthesis = null;
         resolve();
       };
 
       utterance.onerror = (event) => {
         console.error('Speech synthesis error:', event);
-        currentSpeechSynthesis = null;
         reject(event);
       };
 
-      currentSpeechSynthesis = utterance;
       window.speechSynthesis.speak(utterance);
     } catch (error) {
       reject(error);
@@ -269,7 +263,6 @@ export const useChatStore = create<ChatStore>()(
         if (window.speechSynthesis.speaking) {
           window.speechSynthesis.cancel();
         }
-        currentSpeechSynthesis = null;
         set({
           messages: get().messages.map(msg => ({
             ...msg,
