@@ -55,6 +55,8 @@ export const useSpeechRecognition = ({
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const hasResultRef = useRef(false);
 
   useEffect(() => {
     if (!isSupported) {
@@ -67,9 +69,9 @@ export const useSpeechRecognition = ({
     // Create recognition instance
     const recognition = new SpeechRecognition();
     
-    // Configure recognition
-    recognition.continuous = false; // Stop after one result
-    recognition.interimResults = false; // Only final results
+    // Configure recognition for better capture
+    recognition.continuous = true; // Keep listening until manually stopped
+    recognition.interimResults = true; // Show interim results
     recognition.maxAlternatives = 1;
     
     // Set language
@@ -77,18 +79,34 @@ export const useSpeechRecognition = ({
     
     console.log('🎤 Speech Recognition initialized with language:', recognition.lang);
     
-    // Handle results
+    // Handle results (both interim and final)
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       try {
-        const transcript = event.results[0][0].transcript;
-        console.log('🎤 Recognized text:', transcript);
-        console.log('🎤 Confidence:', event.results[0][0].confidence);
+        let finalTranscript = '';
         
-        if (transcript && transcript.trim()) {
-          onResult(transcript);
+        // Process all results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+            console.log('🎤 Final result:', transcript);
+            console.log('🎤 Confidence:', event.results[i][0].confidence);
+          } else {
+            console.log('🎤 Interim result:', transcript);
+          }
         }
         
-        setIsListening(false);
+        // If we got a final result, use it
+        if (finalTranscript.trim()) {
+          hasResultRef.current = true;
+          onResult(finalTranscript.trim());
+          
+          // Auto-stop after getting final result
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+          }
+        }
       } catch (error) {
         console.error('❌ Result processing error:', error);
         onError('Failed to process speech result');
@@ -100,23 +118,33 @@ export const useSpeechRecognition = ({
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('❌ Speech Recognition error:', event.error);
       
+      // Clear timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
       let errorMessage = 'Speech recognition failed';
       
       switch (event.error) {
         case 'no-speech':
-          errorMessage = 'No speech detected. Please try again.';
+          errorMessage = '🎤 No speech detected. Please speak clearly and try again.';
           break;
         case 'audio-capture':
-          errorMessage = 'Microphone not accessible. Check permissions.';
+          errorMessage = '🎤 Microphone not accessible. Please check your microphone.';
           break;
         case 'not-allowed':
-          errorMessage = 'Microphone permission denied. Please allow microphone access.';
+          errorMessage = '🎤 Microphone permission denied. Please allow microphone access in browser settings.';
           break;
         case 'network':
-          errorMessage = 'Network error. Check your internet connection.';
+          errorMessage = '🌐 Network error. Please check your internet connection.';
           break;
         case 'aborted':
-          errorMessage = 'Speech recognition aborted';
+          // Don't show error if we got a result
+          if (hasResultRef.current) {
+            return;
+          }
+          errorMessage = 'Speech recognition was stopped';
           break;
         case 'language-not-supported':
           errorMessage = 'Language not supported by your browser';
@@ -132,18 +160,43 @@ export const useSpeechRecognition = ({
     // Handle end
     recognition.onend = () => {
       console.log('🎤 Speech Recognition ended');
+      
+      // Clear timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      // If no result was captured, show message
+      if (isListening && !hasResultRef.current) {
+        onError('🎤 No speech detected. Please try speaking again.');
+      }
+      
       setIsListening(false);
+      hasResultRef.current = false;
     };
     
     // Handle start
     recognition.onstart = () => {
-      console.log('🎤 Speech Recognition started');
+      console.log('🎤 Speech Recognition started - Listening...');
       setIsListening(true);
+      hasResultRef.current = false;
+      
+      // Set a timeout to auto-stop after 10 seconds
+      timeoutRef.current = window.setTimeout(() => {
+        if (recognitionRef.current && isListening) {
+          console.log('⏱️ Timeout: Stopping recognition after 10 seconds');
+          recognitionRef.current.stop();
+        }
+      }, 10000); // 10 seconds max
     };
     
     recognitionRef.current = recognition;
     
     return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
@@ -152,7 +205,7 @@ export const useSpeechRecognition = ({
         }
       }
     };
-  }, [language, onResult, onError, isSupported]);
+  }, [language, onResult, onError, isSupported, isListening]);
 
   const startListening = () => {
     if (!isSupported) {
@@ -171,6 +224,7 @@ export const useSpeechRecognition = ({
         recognitionRef.current.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
         console.log('🎤 Starting recognition with language:', recognitionRef.current.lang);
         
+        hasResultRef.current = false;
         recognitionRef.current.start();
       }
     } catch (error) {
@@ -187,7 +241,14 @@ export const useSpeechRecognition = ({
 
     try {
       if (recognitionRef.current) {
-        console.log('🎤 Stopping recognition');
+        console.log('🎤 Manually stopping recognition');
+        
+        // Clear timeout
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        
         recognitionRef.current.stop();
       }
     } catch (error) {
